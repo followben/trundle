@@ -68,22 +68,50 @@
 #pragma mark -
 
 - (CURLOperation *)operationToFetchViewNamed:(NSString *)inName options:(NSDictionary *)inOptions withSuccessHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
-	{
+{
     NSURL *theURL = [self.URL URLByAppendingPathComponent:[NSString stringWithFormat:@"_view/%@", inName]];
 
+    // If no options included, retrive document contents by default.
+    if (inOptions == NULL)
+        inOptions = [NSDictionary dictionaryWithObject:@"true" forKey:@"include_docs"];
+
     if (inOptions.count > 0)
-        {
         theURL = [NSURL URLWithRoot:theURL queryDictionary:inOptions];
-        }
 
     NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
     theRequest.HTTPMethod = @"GET";
 	[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Accept"];
     CCouchDBURLOperation *theOperation = [self.session URLOperationWithRequest:theRequest];
-    theOperation.successHandler = inSuccessHandler;
+
+    theOperation.successHandler = ^(id inParameter) {
+        NSMutableArray *theDocuments = [NSMutableArray array];
+        for (NSDictionary *theRow in [inParameter objectForKey:@"rows"])
+        {
+            NSDictionary *doc = [theRow objectForKey:@"doc"];
+            if (doc)
+            {
+                CCouchDBDocument *theDocument = [[[CCouchDBDocument alloc] initWithDatabase:[self database]] autorelease];
+                [theDocument populateWithJSON:doc];
+                
+                [theDocuments addObject:theDocument];
+            }
+            else
+            {
+                NSString *theIdentifier = [theRow objectForKey:@"id"];
+                
+                CCouchDBDocument *theDocument = [[[CCouchDBDocument alloc] initWithDatabase:[self database] identifier:theIdentifier] autorelease];
+                theDocument.revision = [theRow valueForKeyPath:@"value.rev"];
+                
+                [theDocuments addObject:theDocument];
+            }
+        }
+        
+        if (inSuccessHandler)
+            inSuccessHandler(theDocuments);
+    };
     theOperation.failureHandler = inFailureHandler;
 
-	return(theOperation);
-	}
+    return(theOperation);
+}
 
 @end
