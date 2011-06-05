@@ -401,4 +401,31 @@
 	return(theOperation);
 	}
 
+#pragma mark -
+#pragma mark Synchronous Operations
+
+- (void)updateDocument:(CCouchDBDocument *)inDocument
+{
+
+	NSURL *theURL = inDocument.URL;
+	NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
+	theRequest.HTTPMethod = @"PUT";
+	[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Accept"];
+	NSData *theData = [self.session.serializer serializeDictionary:inDocument.content error:NULL];
+	[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Content-Type"];
+	[theRequest setHTTPBody:theData];
+
+    NSURLResponse *urlResponse = nil;
+    NSError *error = nil;
+    NSData *response = [NSURLConnection sendSynchronousRequest:theRequest returningResponse:&urlResponse error: &error];
+    if (response == nil) { // A problem occurred
+        if (error)
+            NSLog(@"Error occurred: %@ : %@", [error description], [urlResponse description]);
+    } else { // Update was successful
+        NSLog(@"Update was successful. URL response: %@", [urlResponse description]);
+    }
+    
+}
+
+
 @end
