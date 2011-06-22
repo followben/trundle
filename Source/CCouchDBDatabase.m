@@ -223,8 +223,8 @@
 
 #pragma mark -
 
-- (CURLOperation *)operationToUpdateDocument:(CCouchDBDocument *)inDocument successHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
-	{
+- (CURLOperation *)operationToWriteDocument:(CCouchDBDocument *)inDocument successHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
+{
 	NSURL *theURL = inDocument.URL;
 	NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
 	theRequest.HTTPMethod = @"PUT";
@@ -235,15 +235,29 @@
 
 	CCouchDBURLOperation *theOperation = [self.session URLOperationWithRequest:theRequest];
 	theOperation.successHandler = ^(id inParameter) {
-		[inDocument populateWithJSON:inParameter];
-
+        
+        NSDictionary *operationResult = inParameter;
+        
+		// URL operation was successful. Check for Couch errors
+        if ([[operationResult objectForKey:@"ok"] boolValue] == NO)
+        {
+			NSError *theError = [NSError errorWithDomain:kCouchErrorDomain code:-3 userInfo:NULL];
+			if (inFailureHandler)
+				inFailureHandler(theError);
+			return;
+        }
+        
+		// The revision has now changed. Make sure the latest one is returned.
+		CCouchDBDocument *theDocument = inDocument;
+		theDocument.revision = [operationResult objectForKey:@"rev"];
+        
 		if (inSuccessHandler)
-			inSuccessHandler(inDocument);
-		};
-	theOperation.failureHandler = inFailureHandler;
+			inSuccessHandler(theDocument);
+    };
 
+	theOperation.failureHandler = inFailureHandler;
 	return(theOperation);
-	}
+}
 
 - (CURLOperation *)operationToDeleteDocument:(CCouchDBDocument *)inDocument successHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
 	{
@@ -404,9 +418,34 @@
 #pragma mark -
 #pragma mark Synchronous Operations
 
-- (void)updateDocument:(CCouchDBDocument *)inDocument
+/*
+ - (CCouchDBDocument *)updateDocument:(CCouchDBDocument *)inDocument
 {
+	NSURL *theURL = inDocument.URL;
+	NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
+	theRequest.HTTPMethod = @"PUT";
+	[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Accept"];
+	NSData *theData = [self.session.serializer serializeDictionary:inDocument.content error:NULL];
+	[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Content-Type"];
+	[theRequest setHTTPBody:theData];
+    
+	CCouchDBURLOperation *theOperation = [self.session URLOperationWithRequest:theRequest];
+	id result = [theOperation executeSynchronously];
+    
+    if (result) {
+        CCouchDBDocument *outDocument = [[[CCouchDBDocument alloc] initWithDatabase:self] autorelease];
+		[outDocument populateWithJSON:result];
+        return outDocument;
 
+    } else {
+        NSLog(@"Failed to update couchDB document");
+        return nil;
+    }
+
+}
+*/
+    
+/*    
 	NSURL *theURL = inDocument.URL;
 	NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
 	theRequest.HTTPMethod = @"PUT";
@@ -418,14 +457,40 @@
     NSURLResponse *urlResponse = nil;
     NSError *error = nil;
     NSData *response = [NSURLConnection sendSynchronousRequest:theRequest returningResponse:&urlResponse error: &error];
-    if (response == nil) { // A problem occurred
+    if (response == nil) { // An infrastructure problem occurred
         if (error)
             NSLog(@"Error occurred: %@ : %@", [error description], [urlResponse description]);
     } else { // Update was successful
-        NSLog(@"Update was successful. URL response: %@", [urlResponse description]);
+        
+        
+        
+        
+        
+        
+        
+        
+        NSString *responseString = [[[NSString alloc] initWithData:response encoding:NSUTF8StringEncoding] autorelease];        
+        
+        
+        if ([[inParameter objectForKey:@"ok"] boolValue] == NO)
+        {
+			NSError *theError = [NSError errorWithDomain:kCouchErrorDomain code:-3 userInfo:NULL];
+			if (inFailureHandler)
+				inFailureHandler(theError);
+			return;
+        }
+        
+		NSString *theRevision = [inParameter objectForKey:@"rev"];
+        
+		CCouchDBDocument *theDocument = [[[CCouchDBDocument alloc] initWithDatabase:self identifier:inIdentifier revision:theRevision] autorelease];
+		[theDocument populateWithJSON:inDocument];
+
+        
+        
+        NSLog(@"Command completed. URL response: %@", [responseString description]);
     }
     
 }
-
+*/
 
 @end
