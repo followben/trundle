@@ -260,26 +260,47 @@
 }
 
 - (CURLOperation *)operationToDeleteDocument:(CCouchDBDocument *)inDocument successHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
-	{
-		NSMutableString *urlString = [[NSMutableString alloc] init];
-		[urlString appendString: [inDocument.URL absoluteString]];
-		[urlString appendFormat:@"?rev=%@", inDocument.revision];
+{
+    NSMutableString *urlString = [[NSMutableString alloc] init];
+    [urlString appendString: [inDocument.URL absoluteString]];
+    [urlString appendFormat:@"?rev=%@", inDocument.revision];
+    
+    NSURL *theURL = [NSURL URLWithString:urlString];
+    
+    // Does this actually delete the whole document or just this revision?
+    
+    [inDocument.URL URLByAppendingPathComponent:[NSString stringWithFormat:@"?rev=%@", inDocument.revision]];
+    NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
+    theRequest.HTTPMethod = @"DELETE";
+    [theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Accept"];
+    CCouchDBURLOperation *theOperation = [self.session URLOperationWithRequest:theRequest];
+    
+    theOperation.successHandler = ^(id inParameter) {
+        
+        NSDictionary *operationResult = inParameter;
+        
+        // URL operation was successful. Check for Couch errors
+        if ([[operationResult objectForKey:@"ok"] boolValue] == NO)
+        {
+            NSError *theError = [NSError errorWithDomain:kCouchErrorDomain code:-3 userInfo:NULL];
+            if (inFailureHandler)
+                inFailureHandler(theError);
+            return;
+        }
+        
+        // The revision has now changed. Make sure the latest one (pointing to the deleted document) is returned.
+        CCouchDBDocument *theDocument = inDocument;
+        theDocument.revision = [operationResult objectForKey:@"rev"];
+        
+        if (inSuccessHandler)
+            inSuccessHandler(theDocument);
+    };
+    
+    theOperation.failureHandler = inFailureHandler;
+    
+    return(theOperation);
+}
 
-		NSURL *theURL = [NSURL URLWithString:urlString];
-
-		[inDocument.URL URLByAppendingPathComponent:[NSString stringWithFormat:@"?rev=%@", inDocument.revision]];
-		NSMutableURLRequest *theRequest = [self.server requestWithURL:theURL];
-		theRequest.HTTPMethod = @"DELETE";
-		[theRequest setValue:kContentTypeJSON forHTTPHeaderField:@"Accept"];
-		CCouchDBURLOperation *theOperation = [self.session URLOperationWithRequest:theRequest];
-		theOperation.successHandler = ^(id inParameter) {
-			if (inSuccessHandler)
-				inSuccessHandler(inDocument);
-			};
-		theOperation.failureHandler = inFailureHandler;
-
-		return(theOperation);
-	}
 
 - (CURLOperation *)operationToFetchChanges:(NSDictionary *)inOptions successHandler:(CouchDBSuccessHandler)inSuccessHandler failureHandler:(CouchDBFailureHandler)inFailureHandler
     {
